@@ -1,0 +1,36 @@
+[project]
+name = "docrag"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "123456-raul", email = "rahul9554781945@gmail.com" }
+]
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "beautifulsoup4>=4.15.0",
+    "faiss-cpu>=1.15.1",
+    "ipykernel>=7.3.0",
+    "langchain>=1.4.2",
+    "langchain-community>=0.4.2",
+    "langchain-huggingface>=1.2.2",
+    "langchain-openai>=1.6.3",
+    "langgraph>=1.2.12",
+    "openai>=3.17.0",
+    "pydantic>=2.13.5",
+    "python-dotenv>=1.2.3",
+    "requests>=2.34.2",
+    "sentence-transformers>=6.1.0",
+    "streamlit>=1.64.0",
+    "wikipedia>=1.4.0",
+]
+
+[project.scripts]
+docrag = "docrag:main"
+
+[build-system]
+requires = ["uv_build>=0.12.7,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv]
+package = false
