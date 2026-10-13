@@ -15,7 +15,7 @@ class Config:
 
     # Model Configuration
    
-    HF_LLM_REPO_ID = "Qwen/Qwen3-4B-Instruct-2507"
+    HF_LLM_REPO_ID = "Qwen/Qwen2.5-1.5B-Instruct"
     HF_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
     # Document Processing
