@@ -43,36 +43,32 @@ def init_session_state():
 
 @st.cache_resource
 def initialize_rag():
-    """Initialize the RAG system (cached)"""
-    try:
-        # Initialize components
-        llm = Config.get_llm()
-        doc_processor = DocumentProcessor(
-            chunk_size=Config.CHUNK_SIZE,
-            chunk_overlap=Config.CHUNK_OVERLAP
-        )
-        vector_store = VectorStore()
-        
-        # Use default URLs
-        urls = Config.DEFAULT_URLS
-        
-        # Process documents
-        documents = doc_processor.process_urls(urls)
-        
-        # Create vector store
-        vector_store.create_vectorstore(documents)
-        
-        # Build graph
-        graph_builder = GraphBuilder(
-            retriever=vector_store.get_retriever(),
-            llm=llm
-        )
-        graph_builder.build()
-        
-        return graph_builder, len(documents)
-    except Exception as e:
-        st.error(f"Failed to initialize: {str(e)}")
-        return None, 0
+    """Initialize the RAG system (cached; failures raise so they aren't cached)"""
+    # Initialize components
+    llm = Config.get_llm()
+    doc_processor = DocumentProcessor(
+        chunk_size=Config.CHUNK_SIZE,
+        chunk_overlap=Config.CHUNK_OVERLAP
+    )
+    vector_store = VectorStore()
+
+    # Use configured sources
+    sources = Config.get_sources()
+
+    # Process documents
+    documents = doc_processor.process_urls(sources)
+
+    # Create vector store
+    vector_store.create_vectorstore(documents)
+
+    # Build graph
+    graph_builder = GraphBuilder(
+        retriever=vector_store.get_retriever(),
+        llm=llm
+    )
+    graph_builder.build()
+
+    return graph_builder, len(documents)
 
 def main():
     """Main application"""
@@ -85,11 +81,13 @@ def main():
     # Initialize system
     if not st.session_state.initialized:
         with st.spinner("Loading system..."):
-            rag_system, num_chunks = initialize_rag()
-            if rag_system:
+            try:
+                rag_system, num_chunks = initialize_rag()
                 st.session_state.rag_system = rag_system
                 st.session_state.initialized = True
                 st.success(f"✅ System ready! ({num_chunks} document chunks loaded)")
+            except Exception as e:
+                st.error(f"Failed to initialize: {str(e)}")
     
     st.markdown("---")
     
@@ -108,8 +106,12 @@ def main():
                 start_time = time.time()
                 
                 # Get answer
-                result = st.session_state.rag_system.run(question)
-                
+                try:
+                    result = st.session_state.rag_system.run(question)
+                except Exception as e:
+                    st.error(f"Could not get an answer from the {Config.LLM_PROVIDER} model: {str(e)}")
+                    st.stop()
+
                 elapsed_time = time.time() - start_time
                 
                 # Add to history
@@ -134,7 +136,9 @@ def main():
                         )
                 
                 st.caption(f"⏱️ Response time: {elapsed_time:.2f} seconds")
-    
+        else:
+            st.error("The system failed to initialize, so searches can't run. See the error above.")
+
     # Show history
     if st.session_state.history:
         st.markdown("---")

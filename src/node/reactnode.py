@@ -9,6 +9,7 @@ from langchain_core.messages import HumanMessage
 from langchain.agents import create_agent
 
 # Wikipedia tool
+import wikipedia
 from langchain_community.utilities import WikipediaAPIWrapper
 from langchain_community.tools.wikipedia.tool import WikipediaQueryRun
 
@@ -49,13 +50,19 @@ class RAGNodes:
             func=retriever_tool_fn
         )
 
+        # Wikipedia rate-limits the library's default User-Agent (HTTP 429)
+        wikipedia.set_user_agent("DocRAG/0.1 (local RAG app)")
+
         wiki = WikipediaQueryRun(
             api_wrapper=WikipediaAPIWrapper(top_k_results=3, lang="en")
         )
 
         def wikipedia_search(query: str) -> str:
             """Search Wikipedia and return relevant results"""
-            return wiki.run(query)
+            try:
+                return wiki.run(query)
+            except Exception as e:
+                return f"Wikipedia search failed: {e}"
 
         wikipedia_tool = Tool(
             name="wikipedia",

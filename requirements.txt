@@ -11,3 +11,7 @@ requests
 streamlit
 wikipedia
 langchain_huggingface
+langchain-ollama
+langchain-groq
+sentence-transformers
+pypdf
