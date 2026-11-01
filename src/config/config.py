@@ -20,7 +20,7 @@ class Config:
     # LLM_PROVIDER: ollama | groq | huggingface | openai
     LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").lower()
     OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:4b")
-    GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    GROQ_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
     HF_LLM_REPO_ID = os.getenv("HF_LLM_REPO_ID", "Qwen/Qwen2.5-1.5B-Instruct")
     HF_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
