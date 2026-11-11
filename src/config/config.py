@@ -7,6 +7,16 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _env_flag(name: str, default: bool) -> bool:
+    """Read an on/off setting such as RERANK=false from the environment"""
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
 
 class Config:
     """Configuration class for RAG system"""
@@ -25,9 +35,30 @@ class Config:
     HF_LLM_REPO_ID = os.getenv("HF_LLM_REPO_ID", "Qwen/Qwen2.5-1.5B-Instruct")
     HF_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
-    # Document Processing
-    CHUNK_SIZE = 500
-    CHUNK_OVERLAP = 50
+    # Document Processing (characters)
+    CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1000"))
+    CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "150"))
+
+    # Retrieval
+    # RETRIEVER_TYPE: tree (cluster tree + beam search) | flat (FAISS, compares every chunk)
+    RETRIEVER_TYPE = os.getenv("RETRIEVER_TYPE", "tree").lower()
+    RETRIEVER_K = 4       # chunks given to the model
+    CANDIDATE_K = 20      # chunks fetched before merging and reranking
+    # Add BM25 keyword search to the embedding search
+    HYBRID_SEARCH = _env_flag("HYBRID_SEARCH", True)
+    # Let a cross-encoder pick the best RETRIEVER_K of the candidates
+    RERANK = _env_flag("RERANK", True)
+    RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+    # Answering
+    # Ask the model whether the retrieved chunks fit the question and, if not,
+    # rewrite the question and search again (one extra model call per question)
+    CHECK_RELEVANCE = _env_flag("CHECK_RELEVANCE", True)
+    MAX_REWRITES = 1      # searches retried with a rewritten question
+    HISTORY_TURNS = 3     # earlier question/answer pairs the model sees
+    TREE_BRANCHING = 4   # children per tree node
+    TREE_LEAF_SIZE = 8   # most chunks stored in one leaf
+    TREE_BEAM_WIDTH = 4  # branches followed per level; higher is more accurate but slower
 
     # Default URLs
     DEFAULT_URLS = [
@@ -36,12 +67,30 @@ class Config:
     ]
 
     # Data locations
-    DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+    DATA_DIR = PROJECT_ROOT / "data"
     URLS_FILE = DATA_DIR / "url.txt"
+
+    # Files added through the app's uploader (not committed to git)
+    UPLOAD_DIR = PROJECT_ROOT / "uploads"
+    UPLOAD_TYPES = ("pdf", "txt", "md")
+
+    # Saved chunks and embeddings, reused on restart (not committed to git)
+    INDEX_CACHE_DIR = PROJECT_ROOT / "index_cache"
+
+    @classmethod
+    def get_uploads(cls):
+        """Return the uploaded files, sorted by name"""
+        if not cls.UPLOAD_DIR.is_dir():
+            return []
+        return sorted(
+            path
+            for path in cls.UPLOAD_DIR.iterdir()
+            if path.is_file() and path.suffix.lower().lstrip(".") in cls.UPLOAD_TYPES
+        )
 
     @classmethod
     def get_sources(cls):
-        """Return URLs from data/url.txt (or the defaults) plus the data folder if it has PDFs"""
+        """Return URLs from data/url.txt (or the defaults), the data folder if it has PDFs, and uploads"""
         urls = []
         if cls.URLS_FILE.exists():
             lines = cls.URLS_FILE.read_text(encoding="utf-8").splitlines()
@@ -50,6 +99,7 @@ class Config:
         sources = urls or list(cls.DEFAULT_URLS)
         if any(cls.DATA_DIR.glob("*.pdf")):
             sources.append(str(cls.DATA_DIR))
+        sources.extend(str(path) for path in cls.get_uploads())
         return sources
 
     @classmethod
@@ -109,9 +159,3 @@ class Config:
             huggingfacehub_api_token=cls.HUGGINGFACEHUB_API_TOKEN,
         )
         return ChatHuggingFace(llm=endpoint)
-
-    @classmethod
-    def get_embeddings(cls):
-        """Initialize and return HuggingFace embeddings (local, free)"""
-        from langchain_huggingface import HuggingFaceEmbeddings
-        return HuggingFaceEmbeddings(model_name=cls.HF_EMBEDDING_MODEL)

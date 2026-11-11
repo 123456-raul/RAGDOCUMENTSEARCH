@@ -1,7 +1,7 @@
 [project]
 name = "docrag"
 version = "0.1.0"
-description = "Add your description here"
+description = "Ask questions about web pages and PDFs: hybrid search, reranking and a LangGraph agent behind a Streamlit chat"
 readme = "README.md"
 authors = [
     { name = "123456-raul", email = "rahul9554781945@gmail.com" }
@@ -37,3 +37,12 @@ build-backend = "uv_build"
 
 [tool.uv]
 package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]

@@ -13,6 +13,7 @@ wheels/
 .env
 # Vector store data (generated)
 faiss_index/
+index_cache/
 
 # Jupyter
 .ipynb_checkpoints/
@@ -22,3 +23,9 @@ faiss_index/
 Thumbs.db
 .vscode/
 
+
+# Files added through the app uploader
+uploads/
+
+# Test and tool caches
+.pytest_cache/

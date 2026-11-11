@@ -49,11 +49,11 @@ class AgenticRAG:
     def _setup_vectorstore(self):
         """Setup vector store with processed documents"""
         print(f"📄 Processing {len(self.urls)} sources...")
-        documents = self.doc_processor.process_urls(self.urls)
-        print(f"📊 Created {len(documents)} document chunks")
-        
-        print("🔍 Creating vector store...")
-        self.vector_store.create_vectorstore(documents)
+        num_chunks, from_cache = self.vector_store.load_or_build(
+            self.urls, self.doc_processor
+        )
+        origin = "loaded from the saved index" if from_cache else "downloaded and embedded"
+        print(f"📊 {num_chunks} document chunks ({origin})")
     
     def ask(self, question: str) -> str:
         """
