@@ -29,3 +29,6 @@ uploads/
 
 # Test and tool caches
 .pytest_cache/
+
+# Leftover temp files from a network/FUSE mount
+.fuse_hidden*

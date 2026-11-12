@@ -1,8 +1,8 @@
 """Measure how often retrieval finds the chunk that holds the answer.
 
-Each question in questions.json comes with a phrase copied from the source
-text. A search counts as a hit when one of the returned chunks contains that
-phrase. The script compares chunk sizes, the tree and flat index, and the
+Each question in questions.json comes with one or more phrases copied from the
+source text. A search counts as a hit when one of the returned chunks contains
+one of them. The script compares chunk sizes, the tree and flat index, and the
 optional keyword-search and reranking steps, on the documents in data/.
 
 Run from the project root:
@@ -41,6 +41,20 @@ def normalize(text: str) -> str:
     return re.sub(r"\s+", " ", text).lower()
 
 
+def answer_phrases(item) -> list:
+    """The accepted phrases for a question; "answer_in" is one phrase or a list.
+
+    A list is for a fact the source states in more than one place in different
+    words, such as "8 NVIDIA P100" and "eight P100 GPUs".
+    """
+    phrases = item["answer_in"]
+    return [normalize(p) for p in ([phrases] if isinstance(phrases, str) else phrases)]
+
+
+def holds_answer(text: str, phrases: list) -> bool:
+    return any(phrase in text for phrase in phrases)
+
+
 def evaluate(retriever, questions, chunk_texts, k):
     """Return hit rate, mean reciprocal rank, search time, share of chunks compared, and misses"""
     retriever.rank("warm up")  # load models before timing
@@ -53,9 +67,9 @@ def evaluate(retriever, questions, chunk_texts, k):
         seconds += time.perf_counter() - start
         compared += retriever.last_search["compared"] / len(chunk_texts)
 
-        answer = normalize(item["answer_in"])
+        phrases = answer_phrases(item)
         rank = next(
-            (pos for pos, i in enumerate(ids, start=1) if answer in chunk_texts[i]),
+            (pos for pos, i in enumerate(ids, start=1) if holds_answer(chunk_texts[i], phrases)),
             None,
         )
         if rank is None:
@@ -102,7 +116,7 @@ def main():
 
         # A phrase cut in half by a chunk boundary could never be found
         for item in questions:
-            if not any(normalize(item["answer_in"]) in t for t in chunk_texts):
+            if not any(holds_answer(t, answer_phrases(item)) for t in chunk_texts):
                 print(f"  WARNING no chunk holds the answer at size {chunk_size}: {item['question']}")
 
         for index_type in INDEXES:

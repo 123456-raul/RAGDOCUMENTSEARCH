@@ -9,7 +9,6 @@ python-dotenv
 beautifulsoup4
 requests
 streamlit
-wikipedia
 langchain_huggingface
 langchain-ollama
 langchain-groq

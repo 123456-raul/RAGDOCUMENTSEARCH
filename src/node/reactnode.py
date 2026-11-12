@@ -18,10 +18,13 @@ from langchain_core.tools import Tool
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain.agents import create_agent
 
-# Wikipedia tool
-import wikipedia
-from langchain_community.utilities import WikipediaAPIWrapper
-from langchain_community.tools.wikipedia.tool import WikipediaQueryRun
+import requests
+
+WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
+# Wikipedia asks automated clients to identify themselves
+WIKIPEDIA_USER_AGENT = "DocRAG/0.1 (local RAG app)"
+WIKIPEDIA_RESULTS = 3
+WIKIPEDIA_SUMMARY_CHARS = 1500
 
 # LangGraph leaves model calls with this tag out of the token stream, so only
 # the final answer is streamed to the user, not the helper calls
@@ -47,6 +50,50 @@ def format_passages(docs: List[Document]) -> str:
         f"[{i}] ({source_label(doc)})\n{doc.page_content}"
         for i, doc in enumerate(docs, start=1)
     )
+
+
+def wikipedia_search(query: str) -> str:
+    """
+    Return the opening summary of the best-matching Wikipedia pages.
+
+    One request fetches the search results together with their summaries.
+    Wikipedia answers a burst of requests with HTTP 429, which is what the
+    `wikipedia` library ran into by sending several requests per page.
+    """
+    try:
+        response = requests.get(
+            WIKIPEDIA_API,
+            params={
+                "action": "query",
+                "format": "json",
+                "generator": "search",
+                "gsrsearch": query,
+                "gsrlimit": WIKIPEDIA_RESULTS,
+                "prop": "extracts",
+                "exintro": 1,
+                "explaintext": 1,
+                "exlimit": WIKIPEDIA_RESULTS,
+                "redirects": 1,
+            },
+            headers={"User-Agent": WIKIPEDIA_USER_AGENT},
+            timeout=10,
+        )
+        if response.status_code == 429:
+            wait = response.headers.get("Retry-After", "a few")
+            return f"Wikipedia is rate-limiting requests. Try again in {wait} seconds."
+        response.raise_for_status()
+        pages = response.json().get("query", {}).get("pages", {})
+    except Exception as e:
+        return f"Wikipedia search failed: {e}"
+
+    # "index" is the page's position in the search results
+    ranked = sorted(pages.values(), key=lambda page: page.get("index", 0))
+    summaries = [
+        f"Page: {page['title']}\nSummary: {page['extract'][:WIKIPEDIA_SUMMARY_CHARS]}"
+        for page in ranked
+        if page.get("extract")
+    ]
+    return "\n\n".join(summaries) or "No Wikipedia page found."
 
 
 class RAGNodes:
@@ -151,20 +198,6 @@ class RAGNodes:
             description="Fetch passages from indexed corpus.",
             func=retriever_tool_fn
         )
-
-        # Wikipedia rate-limits the library's default User-Agent (HTTP 429)
-        wikipedia.set_user_agent("DocRAG/0.1 (local RAG app)")
-
-        wiki = WikipediaQueryRun(
-            api_wrapper=WikipediaAPIWrapper(top_k_results=3, lang="en")
-        )
-
-        def wikipedia_search(query: str) -> str:
-            """Search Wikipedia and return relevant results"""
-            try:
-                return wiki.run(query)
-            except Exception as e:
-                return f"Wikipedia search failed: {e}"
 
         wikipedia_tool = Tool(
             name="wikipedia",

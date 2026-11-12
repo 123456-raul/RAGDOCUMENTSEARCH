@@ -105,30 +105,47 @@ contextualize -> retriever -> grader --passages fit--> responder
 The grader costs one extra model call per question. Set `CHECK_RELEVANCE=false` to skip it.
 
 ## 📊 Evaluation
-[evaluation/questions.json](evaluation/questions.json) holds 20 questions about the built-in documents, each with a phrase copied from the source text. A search counts as a hit when one of the 4 returned chunks contains that phrase.
+[evaluation/questions.json](evaluation/questions.json) holds 20 questions about the built-in documents, each with one or more phrases copied from the source text. A search counts as a hit when one of the 4 returned chunks contains one of them. A question has several phrases when the source states the fact in more than one place, such as "8 NVIDIA P100" and "eight P100 GPUs".
 
 | Chunks (size / overlap) | Index | Embeddings only | + keywords | + reranker | + keywords + reranker |
 |---|---|---|---|---|---|
-| 500 / 50 | flat | 65% | 70% | 75% | 75% |
-| 500 / 50 | tree | 45% | 60% | 65% | 80% |
-| 1,000 / 150 | flat | 75% | 80% | 85% | 90% |
-| 1,000 / 150 | tree | 75% | 85% | 85% | **90%** (default) |
+| 500 / 50 | flat | 75% | 75% | 85% | 85% |
+| 500 / 50 | tree | 55% | 65% | 70% | 90% |
+| 1,000 / 150 | flat | 85% | 90% | 95% | 100% |
+| 1,000 / 150 | tree | 85% | 90% | 95% | **100%** (default) |
 
-- The tree compares a query with 19% to 33% of the chunk embeddings. On its own it finds fewer answers than flat search with small chunks (45% against 65%), and keyword search plus reranking close that gap.
+- The tree compares a query with 19% to 33% of the chunk embeddings. On its own it finds fewer answers than flat search with small chunks (55% against 75%), and keyword search plus reranking close that gap.
 - Reranking takes the search from about 10 ms to about 0.9 s on a laptop CPU.
 - Four 1,000-character chunks hold twice the text of four 500-character chunks, which is part of why larger chunks score higher.
-- With 20 questions, one question is 5 points, so small differences are not meaningful.
+- With 20 questions, one question is 5 points, so small differences are not meaningful. The default setup now finds every answer, so this set can no longer show whether a change improves it; harder questions are needed for that.
 
 The full table, with mean reciprocal rank and timings, is in [evaluation/results.md](evaluation/results.md). To run it again:
 ```bash
 uv run python evaluation/evaluate.py
 ```
 
+### Answer quality
+Finding the right passage doesn't prove the answer is right, so [evaluation/evaluate_answers.py](evaluation/evaluate_answers.py) runs the same 20 questions through the whole workflow and has a model judge each answer twice:
+
+| Check | What it asks | Result |
+|---|---|---|
+| Correct | Does the answer state the same fact as the reference answer in `questions.json`? | 20 of 20 |
+| Grounded | Is every claim in the answer stated in the retrieved passages? | 18 of 20 |
+| Cited | Does the answer point to a numbered passage? | 20 of 20 |
+
+- The two answers marked not grounded were both correct. One added background from Wikipedia and said so; the other added a one-line inference ("enables faster retrieval") that the passage doesn't state.
+- The judge is the same model that wrote the answers (`qwen/qwen3.8-27b` on Groq), which can make it lenient. Every answer and the judge's reason are listed in [evaluation/answer_results.md](evaluation/answer_results.md) so the verdicts can be checked by hand.
+- The run makes about 80 model calls and takes over 10 minutes on Groq's free tier because of rate limits.
+
+```bash
+uv run python evaluation/evaluate_answers.py
+```
+
 ## ✅ Tests
 ```bash
 uv run pytest
 ```
-The tests cover BM25, both indexes, fusion, the saved index, document loading, and the graph's branch and loop. They use stand-ins for the models, so they need no API key.
+The tests cover BM25, both indexes, fusion, the saved index, document loading, the graph's branch and loop, the Wikipedia tool, and the answer evaluation's judging code. They use stand-ins for the models, so they need no API key.
 
 ## ☁️ Deployment
 Ollama only runs on the machine where it is installed, so a hosted app needs a cloud provider such as Groq. `.env` isn't pushed to GitHub, so add the settings on the host as well.
@@ -143,14 +160,7 @@ Uploaded files are stored in `uploads/` on the server and are searched by everyo
 
 **GitHub Codespaces:** create a `.env` file in the Codespace with the same settings, written as in the Groq example above, then restart the app.
 
-## 🔧 Troubleshooting
-| Error | Cause | Fix |
-|---|---|---|
-| `Could not get an answer from the ollama model: [Errno 111] Connection refused` | The app can't reach Ollama, usually because it is hosted and has no `LLM_PROVIDER` setting | Follow the Deployment steps above |
-| `WinError 10061` or another Ollama connection error on your own machine | Ollama isn't running | Open the Ollama app or run `ollama serve` |
-| `model '...' not found` from Ollama | The model hasn't been downloaded | Run `ollama pull <model>` |
-| `model_not_found` from Groq | The model isn't available to your account | Set `GROQ_MODEL` to one listed in the [Groq console](https://console.groq.com/docs/models) |
-| `model_not_supported` from Hugging Face | No enabled provider serves the model | Enable a provider in your [inference settings](https://huggingface.co/settings/inference-providers) or choose another model |
+
 
 ## 💡 Example Usage
 1. Put PDFs in the `data/` folder and URLs in `data/url.txt` (one per line), or upload files in the app's sidebar
@@ -161,4 +171,5 @@ Uploaded files are stored in `uploads/` on the server and are searched by everyo
 ## 📌 Future Improvements
 - Add support for more file formats (DOCX, etc.)
 - Keep each visitor's uploads separate on a hosted app
-- Evaluate answer quality as well as retrieval
+- Judge answers with a different model from the one that writes them
+- Add harder evaluation questions, now that the default setup finds all 20
